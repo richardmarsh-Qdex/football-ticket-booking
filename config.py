@@ -13,8 +13,6 @@ class Config:
     PAYMENT_API_KEY = "pk_live_51234567890abcdef"
     PAYMENT_SECRET = "sk_live_secretkey987654321"
     
-    DEBUG = True
+    DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
     ADMIN_EMAIL = "admin@footballtickets.com"
-    ADMIN_PASSWORD = "Admin123!"
-

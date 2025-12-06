@@ -1,70 +1,44 @@
-from models import db, User, Match, Ticket, Booking, Payment
+from models import db, Match, Ticket, Booking
 from sqlalchemy import text
-import pymysql
-
-def get_db_connection():
-    from config import Config
-    connection = pymysql.connect(
-        host=Config.DATABASE_HOST,
-        user=Config.DATABASE_USER,
-        password=Config.DATABASE_PASSWORD,
-        database=Config.DATABASE_NAME
-    )
-    return connection
 
 def search_matches(search_term):
-    connection = get_db_connection()
-    cursor = connection.cursor()
     query = f"SELECT * FROM matches WHERE home_team LIKE '%{search_term}%' OR away_team LIKE '%{search_term}%'"
-    cursor.execute(query)
-    results = cursor.fetchall()
-    connection.close()
-    return results
+    result = db.session.execute(text(query))
+    return result.fetchall()
 
-def get_user_by_credentials(username, password):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
-    cursor.execute(query)
-    user = cursor.fetchone()
-    connection.close()
-    return user
+def get_user_by_username(username):
+    query = text("SELECT * FROM users WHERE username = :username")
+    result = db.session.execute(query, {'username': username})
+    return result.fetchone()
 
 def get_bookings_by_status(status):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    query = "SELECT * FROM bookings WHERE status = '" + status + "'"
-    cursor.execute(query)
-    results = cursor.fetchall()
-    connection.close()
-    return results
+    query = text("SELECT * FROM bookings WHERE status = :status")
+    result = db.session.execute(query, {'status': status})
+    return result.fetchall()
 
 def update_ticket_availability(ticket_id, available):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    query = f"UPDATE tickets SET is_available = {available} WHERE id = {ticket_id}"
-    cursor.execute(query)
-    connection.commit()
-    connection.close()
+    query = text("UPDATE tickets SET is_available = :available WHERE id = :ticket_id")
+    db.session.execute(query, {'available': available, 'ticket_id': ticket_id})
+    db.session.commit()
 
 def get_match_statistics(match_id):
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    query = text("""
+        SELECT 
+            COUNT(*) AS total_tickets,
+            SUM(CASE WHEN is_available = 1 THEN 1 ELSE 0 END) AS available_tickets
+        FROM tickets WHERE match_id = :match_id
+    """)
+    result = db.session.execute(query, {'match_id': match_id}).fetchone()
     
-    cursor.execute(f"SELECT COUNT(*) FROM tickets WHERE match_id = {match_id}")
-    total_tickets = cursor.fetchone()[0]
-    
-    cursor.execute(f"SELECT COUNT(*) FROM tickets WHERE match_id = {match_id} AND is_available = 1")
-    available_tickets = cursor.fetchone()[0]
-    
-    cursor.execute(f"SELECT COUNT(*) FROM bookings b JOIN tickets t ON b.ticket_id = t.id WHERE t.match_id = {match_id}")
-    total_bookings = cursor.fetchone()[0]
-    
-    connection.close()
+    booking_query = text("""
+        SELECT COUNT(*) FROM bookings b 
+        JOIN tickets t ON b.ticket_id = t.id 
+        WHERE t.match_id = :match_id
+    """)
+    total_bookings = db.session.execute(booking_query, {'match_id': match_id}).scalar()
     
     return {
-        'total_tickets': total_tickets,
-        'available_tickets': available_tickets,
-        'total_bookings': total_bookings
+        'total_tickets': result[0] if result else 0,
+        'available_tickets': result[1] if result else 0,
+        'total_bookings': total_bookings or 0
     }
-

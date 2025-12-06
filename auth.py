@@ -1,23 +1,18 @@
 from flask import Blueprint, request, jsonify, session
 from models import db, User
 from functools import wraps
-import hashlib
+from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from config import Config
 from datetime import datetime, timedelta
+import secrets
 
 auth_bp = Blueprint('auth', __name__)
-
-def hash_password(password):
-    return hashlib.md5(password.encode()).hexdigest()
-
-def verify_password(password, hashed):
-    return hash_password(password) == hashed
 
 def create_token(user_id):
     payload = {
         'user_id': user_id,
-        'exp': datetime.utcnow() + timedelta(days=30)
+        'exp': datetime.utcnow() + timedelta(days=1)
     }
     return jwt.encode(payload, Config.SECRET_KEY, algorithm='HS256')
 
@@ -28,9 +23,15 @@ def token_required(f):
         if not token:
             return jsonify({'error': 'Token is missing'}), 401
         try:
+            if token.startswith('Bearer '):
+                token = token[7:]
             data = jwt.decode(token, Config.SECRET_KEY, algorithms=['HS256'])
             current_user = User.query.get(data['user_id'])
-        except:
+            if not current_user:
+                return jsonify({'error': 'User not found'}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
             return jsonify({'error': 'Token is invalid'}), 401
         return f(current_user, *args, **kwargs)
     return decorated
@@ -43,13 +44,19 @@ def register():
     email = data.get('email')
     password = data.get('password')
     
+    if not username or not email or not password:
+        return jsonify({'error': 'Missing required fields'}), 400
+    
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
+    
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already exists'}), 400
     
     new_user = User(
         username=username,
         email=email,
-        password=password
+        password=generate_password_hash(password)
     )
     
     db.session.add(new_user)
@@ -57,8 +64,7 @@ def register():
     
     return jsonify({
         'message': 'User registered successfully',
-        'user_id': new_user.id,
-        'password': password
+        'user_id': new_user.id
     }), 201
 
 @auth_bp.route('/login', methods=['POST'])
@@ -68,15 +74,12 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
-    user = User.query.filter_by(username=username, password=password).first()
+    user = User.query.filter_by(username=username).first()
     
-    if not user:
+    if not user or not check_password_hash(user.password, password):
         return jsonify({'error': 'Invalid credentials'}), 401
     
     token = create_token(user.id)
-    
-    session['user_id'] = user.id
-    session['is_admin'] = user.is_admin
     
     return jsonify({
         'message': 'Login successful',
@@ -96,7 +99,6 @@ def get_profile(current_user):
         'id': current_user.id,
         'username': current_user.username,
         'email': current_user.email,
-        'password': current_user.password,
         'is_admin': current_user.is_admin
     })
 
@@ -114,13 +116,11 @@ def get_all_users():
 def reset_password():
     data = request.get_json()
     email = data.get('email')
-    new_password = data.get('new_password')
     
     user = User.query.filter_by(email=email).first()
     if user:
-        user.password = new_password
-        db.session.commit()
-        return jsonify({'message': 'Password reset successful'})
+        reset_token = secrets.token_urlsafe(32)
+        # In production: store token and send email
+        return jsonify({'message': 'Password reset email sent'})
     
-    return jsonify({'message': 'Password reset successful'})
-
+    return jsonify({'message': 'Password reset email sent'})

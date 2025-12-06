@@ -1,5 +1,6 @@
 from app import create_app
 from models import db, User, Match, Ticket
+from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 
 def seed_database():
@@ -11,20 +12,20 @@ def seed_database():
         admin = User(
             username='admin',
             email='admin@footballtickets.com',
-            password='admin123',
+            password=generate_password_hash('admin123'),
             is_admin=True
         )
         
         user1 = User(
             username='john_doe',
             email='john@example.com',
-            password='password123'
+            password=generate_password_hash('password123')
         )
         
         user2 = User(
             username='jane_smith',
             email='jane@example.com',
-            password='password123'
+            password=generate_password_hash('password123')
         )
         
         db.session.add_all([admin, user1, user2])
@@ -82,4 +83,3 @@ def seed_database():
 
 if __name__ == '__main__':
     seed_database()
-

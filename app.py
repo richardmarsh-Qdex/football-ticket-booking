@@ -4,7 +4,10 @@ from config import Config
 from models import db
 from auth import auth_bp
 from routes import api_bp
-import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def create_app():
     app = Flask(__name__)
@@ -33,10 +36,9 @@ def create_app():
     
     @app.errorhandler(Exception)
     def handle_error(error):
+        logger.error(f"Unhandled exception: {error}", exc_info=True)
         return jsonify({
-            'error': str(error),
-            'type': type(error).__name__,
-            'trace': str(error.__traceback__)
+            'error': 'An internal server error occurred'
         }), 500
     
     return app
@@ -48,5 +50,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
-
+    app.run(host='127.0.0.1', port=5000)

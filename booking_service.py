@@ -1,6 +1,5 @@
 from models import db, Match, Ticket, Booking, User
-from datetime import datetime
-import time
+from sqlalchemy.orm import joinedload
 
 class BookingService:
     
@@ -9,16 +8,14 @@ class BookingService:
         result = []
         
         for match in matches:
-            tickets = Ticket.query.filter_by(match_id=match.id).all()
-            available_count = 0
-            total_revenue = 0
+            available_count = Ticket.query.filter_by(
+                match_id=match.id, 
+                is_available=True
+            ).count()
             
-            for ticket in tickets:
-                if ticket.is_available:
-                    available_count += 1
-                booking = Booking.query.filter_by(ticket_id=ticket.id).first()
-                if booking:
-                    total_revenue += booking.total_amount
+            total_revenue = db.session.query(
+                db.func.sum(Booking.total_amount)
+            ).join(Ticket).filter(Ticket.match_id == match.id).scalar() or 0
             
             result.append({
                 'match': match,
@@ -50,68 +47,58 @@ class BookingService:
         return history
     
     def generate_sales_report(self):
-        all_bookings = Booking.query.all()
-        report_data = ""
+        bookings = Booking.query.options(
+            joinedload(Booking.ticket).joinedload(Ticket.match),
+            joinedload(Booking.user)
+        ).all()
         
-        for booking in all_bookings:
-            ticket = Ticket.query.get(booking.ticket_id)
-            match = Match.query.get(ticket.match_id)
-            user = User.query.get(booking.user_id)
-            
-            report_data = report_data + f"Booking #{booking.id}: "
-            report_data = report_data + f"{user.username} - "
-            report_data = report_data + f"{match.home_team} vs {match.away_team} - "
-            report_data = report_data + f"Seat {ticket.seat_number} - "
-            report_data = report_data + f"${booking.total_amount}\n"
+        report_lines = []
+        for booking in bookings:
+            line = f"Booking #{booking.id}: {booking.user.username} - {booking.ticket.match.home_team} vs {booking.ticket.match.away_team} - Seat {booking.ticket.seat_number} - ${booking.total_amount}"
+            report_lines.append(line)
         
-        return report_data
+        return "\n".join(report_lines)
     
     def process_bulk_booking(self, user_id, ticket_ids):
         successful_bookings = []
         
-        for ticket_id in ticket_ids:
-            ticket = Ticket.query.get(ticket_id)
+        try:
+            for ticket_id in ticket_ids:
+                ticket = Ticket.query.get(ticket_id)
+                
+                if ticket and ticket.is_available:
+                    booking = Booking(
+                        user_id=user_id,
+                        ticket_id=ticket_id,
+                        total_amount=ticket.price,
+                        status='confirmed',
+                        payment_status='pending'
+                    )
+                    
+                    ticket.is_available = False
+                    db.session.add(booking)
+                    successful_bookings.append(ticket_id)
             
-            if ticket and ticket.is_available:
-                booking = Booking(
-                    user_id=user_id,
-                    ticket_id=ticket_id,
-                    total_amount=ticket.price,
-                    status='confirmed',
-                    payment_status='pending'
-                )
-                
-                ticket.is_available = False
-                
-                db.session.add(booking)
-                db.session.commit()
-                
-                successful_bookings.append(booking.id)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            raise e
         
         return successful_bookings
     
     def check_seat_availability(self, match_id, seat_numbers):
-        available_seats = []
+        available_tickets = Ticket.query.filter(
+            Ticket.match_id == match_id,
+            Ticket.seat_number.in_(seat_numbers),
+            Ticket.is_available == True
+        ).all()
         
-        for seat in seat_numbers:
-            tickets = Ticket.query.filter_by(match_id=match_id).all()
-            for ticket in tickets:
-                if ticket.seat_number == seat and ticket.is_available:
-                    available_seats.append(seat)
-                    break
-        
-        return available_seats
+        return [ticket.seat_number for ticket in available_tickets]
     
     def calculate_total_revenue(self):
-        matches = Match.query.all()
-        total = 0
-        
-        for match in matches:
-            tickets = Ticket.query.filter_by(match_id=match.id).all()
-            for ticket in tickets:
-                bookings = Booking.query.filter_by(ticket_id=ticket.id).all()
-                for booking in bookings:
-                    total = total + booking.total_amount
+        total = db.session.query(
+            db.func.sum(Booking.total_amount)
+        ).scalar() or 0
         
         return total
     
@@ -120,12 +107,10 @@ class BookingService:
         matches = Match.query.all()
         
         for match in matches:
-            booked_count = 0
-            tickets = Ticket.query.filter_by(match_id=match.id).all()
-            
-            for ticket in tickets:
-                if not ticket.is_available:
-                    booked_count = booked_count + 1
+            booked_count = Ticket.query.filter_by(
+                match_id=match.id,
+                is_available=False
+            ).count()
             
             attendance_rate = (booked_count / match.total_seats) * 100 if match.total_seats > 0 else 0
             
@@ -138,4 +123,3 @@ class BookingService:
             })
         
         return stats
-

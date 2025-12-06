@@ -1,11 +1,9 @@
 from flask import Blueprint, request, jsonify
-from models import db, Match, Ticket, Booking, User
+from models import db, Match, Ticket, Booking
 from booking_service import BookingService
 from payment import PaymentProcessor, calculate_discount, generate_invoice
 from auth import token_required
 from database import search_matches, get_bookings_by_status
-import pickle
-import base64
 
 api_bp = Blueprint('api', __name__)
 booking_service = BookingService()
@@ -13,22 +11,31 @@ payment_processor = PaymentProcessor()
 
 @api_bp.route('/matches', methods=['GET'])
 def get_matches():
-    matches = Match.query.all()
-    return jsonify([{
-        'id': m.id,
-        'home_team': m.home_team,
-        'away_team': m.away_team,
-        'venue': m.venue,
-        'match_date': m.match_date.isoformat(),
-        'ticket_price': m.ticket_price,
-        'available_seats': m.available_seats
-    } for m in matches])
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    
+    matches = Match.query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return jsonify({
+        'matches': [{
+            'id': m.id,
+            'home_team': m.home_team,
+            'away_team': m.away_team,
+            'venue': m.venue,
+            'match_date': m.match_date.isoformat(),
+            'ticket_price': m.ticket_price,
+            'available_seats': m.available_seats
+        } for m in matches.items],
+        'total': matches.total,
+        'pages': matches.pages,
+        'current_page': page
+    })
 
 @api_bp.route('/matches/search', methods=['GET'])
 def search():
     query = request.args.get('q', '')
     results = search_matches(query)
-    return jsonify({'results': results})
+    return jsonify({'results': [dict(r) for r in results] if results else []})
 
 @api_bp.route('/matches/<int:match_id>', methods=['GET'])
 def get_match(match_id):
@@ -103,11 +110,12 @@ def bulk_booking(current_user):
 def process_payment(current_user):
     data = request.get_json()
     
+    if not data or 'booking_id' not in data or 'amount' not in data:
+        return jsonify({'error': 'Missing required payment information'}), 400
+    
     result = payment_processor.process_payment(
         booking_id=data.get('booking_id'),
-        card_number=data.get('card_number'),
-        cvv=data.get('cvv'),
-        expiry=data.get('expiry'),
+        payment_token=data.get('payment_token'),
         amount=data.get('amount')
     )
     
@@ -120,7 +128,13 @@ def get_user_bookings(current_user):
     return jsonify(history)
 
 @api_bp.route('/bookings/<int:booking_id>/invoice', methods=['GET'])
-def get_invoice(booking_id):
+@token_required
+def get_invoice(current_user, booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    
+    if booking.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Forbidden'}), 403
+    
     invoice = generate_invoice(booking_id)
     return jsonify({'invoice': invoice})
 
@@ -128,7 +142,7 @@ def get_invoice(booking_id):
 def admin_get_bookings():
     status = request.args.get('status', 'pending')
     bookings = get_bookings_by_status(status)
-    return jsonify({'bookings': bookings})
+    return jsonify({'bookings': [dict(b) for b in bookings] if bookings else []})
 
 @api_bp.route('/admin/reports/sales', methods=['GET'])
 def sales_report():
@@ -144,33 +158,3 @@ def revenue_report():
 def attendance_stats():
     stats = booking_service.get_match_attendance_stats()
     return jsonify({'stats': stats})
-
-@api_bp.route('/import/data', methods=['POST'])
-def import_data():
-    data = request.get_json()
-    encoded_data = data.get('payload')
-    
-    if encoded_data:
-        decoded = base64.b64decode(encoded_data)
-        imported_object = pickle.loads(decoded)
-        return jsonify({'status': 'imported', 'data': str(imported_object)})
-    
-    return jsonify({'error': 'No data provided'}), 400
-
-@api_bp.route('/export/bookings', methods=['GET'])
-@token_required
-def export_bookings(current_user):
-    bookings = Booking.query.filter_by(user_id=current_user.id).all()
-    
-    booking_data = [{
-        'id': b.id,
-        'ticket_id': b.ticket_id,
-        'amount': b.total_amount,
-        'status': b.status
-    } for b in bookings]
-    
-    serialized = pickle.dumps(booking_data)
-    encoded = base64.b64encode(serialized).decode()
-    
-    return jsonify({'export_data': encoded})
-
