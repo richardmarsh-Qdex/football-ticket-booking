@@ -1,6 +1,7 @@
 from models import db, Match, Ticket, Booking, User
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 
 class BookingService:
     
@@ -59,6 +60,7 @@ class BookingService:
     
     def process_bulk_booking(self, user_id, ticket_ids):
         successful_bookings = []
+        failed_bookings = []
         
         try:
             for ticket_id in ticket_ids:
@@ -74,18 +76,18 @@ class BookingService:
                     )
                     
                     ticket.is_available = False
-                    if ticket.match:
-                        ticket.match.available_seats -= 1
                     
                     db.session.add(booking)
                     successful_bookings.append(ticket_id)
+                else:
+                    failed_bookings.append({'ticket_id': ticket_id, 'reason': 'Not available or does not exist'})
             
             db.session.commit()
-        except Exception as e:
+        except SQLAlchemyError as e:
             db.session.rollback()
             raise e
         
-        return successful_bookings
+        return {'successful': successful_bookings, 'failed': failed_bookings}
     
     def check_seat_availability(self, match_id, seat_numbers):
         available_tickets = Ticket.query.filter(

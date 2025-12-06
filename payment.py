@@ -37,9 +37,9 @@ class PaymentProcessor:
                 f"{self.base_url}/charge",
                 json={
                     'payment_token': payment_token,
-                    'amount': amount,
-                    'api_key': self.api_key
+                    'amount': amount
                 },
+                headers={'Authorization': f'Bearer {self.api_key}'},
                 timeout=30
             )
             response.raise_for_status()
@@ -87,6 +87,9 @@ class PaymentProcessor:
             
             if result.get('status') == 'success':
                 payment.status = 'refunded'
+                booking = payment.booking
+                booking.status = 'cancelled'
+                booking.ticket.is_available = True
                 db.session.commit()
                 return {'success': True, 'message': 'Refund processed'}
             

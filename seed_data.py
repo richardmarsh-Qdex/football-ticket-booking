@@ -10,7 +10,9 @@ def seed_database():
     with app.app_context():
         db.create_all()
         
-        admin_password = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'changeme123!')
+        admin_password = os.environ.get('DEFAULT_ADMIN_PASSWORD')
+        if not admin_password:
+            raise ValueError("DEFAULT_ADMIN_PASSWORD environment variable not set.")
         
         admin = User(
             username='admin',

@@ -1,14 +1,15 @@
 import re
 import logging
+import os
 from datetime import datetime
 from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
-SERVICE_FEE_RATE = 0.15
+SERVICE_FEE_RATE = float(os.environ.get('SERVICE_FEE_RATE', 0.15))
 
 def validate_email(email):
-    pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    pattern = r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"
     return re.match(pattern, email) is not None
 
 def format_currency(amount):

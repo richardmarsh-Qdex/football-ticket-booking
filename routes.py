@@ -150,7 +150,10 @@ def get_invoice(current_user, booking_id):
 
 @api_bp.route('/admin/bookings', methods=['GET'])
 def admin_get_bookings():
+    ALLOWED_STATUSES = ['pending', 'confirmed', 'cancelled']
     status = request.args.get('status', 'pending')
+    if status not in ALLOWED_STATUSES:
+        return jsonify({'error': 'Invalid status value'}), 400
     bookings = get_bookings_by_status(status)
     return jsonify({'bookings': [{
         'id': b.id,

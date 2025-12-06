@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from werkzeug.exceptions import HTTPException
 from config import Config
 from models import db
 from auth import auth_bp
@@ -36,8 +37,12 @@ def create_app():
     def health():
         return jsonify({'status': 'healthy'})
     
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(e):
+        return jsonify({'error': e.description}), e.code
+
     @app.errorhandler(Exception)
-    def handle_error(error):
+    def handle_generic_error(error):
         logger.error(f"Unhandled exception: {error}", exc_info=True)
         return jsonify({'error': 'An internal server error occurred'}), 500
     

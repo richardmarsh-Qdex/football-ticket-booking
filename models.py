@@ -28,7 +28,8 @@ class Match(db.Model):
     venue = db.Column(db.String(200), nullable=False)
     match_date = db.Column(db.DateTime, nullable=False)
     total_seats = db.Column(db.Integer, default=50000)
-    available_seats = db.Column(db.Integer, default=50000)
+    # This column is redundant with Ticket.is_available and can be removed.
+    # available_seats = db.Column(db.Integer, default=50000)
     ticket_price = db.Column(db.Float, nullable=False)
     
     tickets = db.relationship('Ticket', backref='match', lazy=True)
@@ -62,7 +63,7 @@ class Booking(db.Model):
     payment_status = db.Column(db.String(20), default='unpaid')
     total_amount = db.Column(db.Float, nullable=False)
     
-    ticket = db.relationship('Ticket', backref='booking')
+    ticket = db.relationship('Ticket', backref=db.backref('booking', uselist=False))
     
     def __repr__(self):
         return f'<Booking {self.id}>'
@@ -79,8 +80,7 @@ class Payment(db.Model):
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    booking = db.relationship('Booking', backref='payment')
+    booking = db.relationship('Booking', backref=db.backref('payment', uselist=False))
     
     def __repr__(self):
         return f'<Payment {self.transaction_id}>'
-
