@@ -50,18 +50,15 @@ def register():
     if not username or not email or not password:
         return jsonify({'error': 'Missing required fields'}), 400
     
-    # Use email-validator library for robust validation
     try:
         from email_validator import validate_email, EmailNotValidError
         validate_email(email)
     except EmailNotValidError as e:
         return jsonify({'error': str(e)}), 400
     except ImportError:
-        # Fallback to regex if email-validator is not installed
         if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email):
             return jsonify({'error': 'Invalid email format'}), 400
     
-    # Strong password policy: at least 8 chars with uppercase, lowercase, number, and special char
     if len(password) < 8 or not re.search(r'[A-Z]', password) or not re.search(r'[a-z]', password) or not re.search(r'\d', password) or not re.search(r'[^\w\s]', password):
         return jsonify({'error': 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.'}), 400
     

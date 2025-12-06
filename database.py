@@ -5,15 +5,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 def search_matches(search_term):
-    # Using parameterized query to prevent SQL injection
-    # Note: LIKE with leading wildcard prevents index usage - consider full-text search for production
     search_pattern = f"%{search_term}%"
     return Match.query.filter(
         or_(Match.home_team.like(search_pattern), Match.away_team.like(search_pattern))
     ).all()
 
 def get_bookings_by_status(status):
-    # Convert string status to enum if needed
     status_map = {
         'pending': BookingStatus.PENDING,
         'confirmed': BookingStatus.CONFIRMED,

@@ -30,8 +30,6 @@ class Match(db.Model):
     venue = db.Column(db.String(200), nullable=False)
     match_date = db.Column(db.DateTime, nullable=False)
     total_seats = db.Column(db.Integer, default=50000)
-    # This column is redundant with Ticket.is_available and can be removed.
-    # available_seats = db.Column(db.Integer, default=50000)
     ticket_price = db.Column(db.Numeric(10, 2), nullable=False)
     
     tickets = db.relationship('Ticket', backref='match', lazy=True)
@@ -78,13 +76,11 @@ class Booking(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    # Removed ticket_id - now using one-to-many relationship via Ticket.booking_id
     booking_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(SQLEnum(BookingStatus), default=BookingStatus.PENDING, nullable=False)
     payment_status = db.Column(SQLEnum(PaymentStatus), default=PaymentStatus.UNPAID, nullable=False)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     
-    # One-to-many relationship: a booking can have multiple tickets
     tickets = db.relationship('Ticket', backref='booking', lazy=True)
     
     def __repr__(self):

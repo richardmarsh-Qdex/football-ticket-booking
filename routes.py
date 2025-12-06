@@ -22,7 +22,6 @@ def get_matches():
     
     result = []
     for m in matches.items:
-        # Calculate available seats from tickets
         available_count = db.session.query(func.count(Ticket.id)).filter(
             Ticket.match_id == m.id,
             Ticket.is_available == True
@@ -61,7 +60,6 @@ def get_match(match_id):
     from sqlalchemy import func
     match = Match.query.get_or_404(match_id)
     
-    # Calculate available seats from tickets
     available_count = db.session.query(func.count(Ticket.id)).filter(
         Ticket.match_id == match.id,
         Ticket.is_available == True

@@ -28,7 +28,6 @@ class BookingService:
         return result
     
     def get_user_booking_history(self, user_id):
-        # Query modified to use joinedload to prevent N+1
         bookings = Booking.query.options(
             joinedload(Booking.tickets).joinedload(Ticket.match)
         ).filter_by(user_id=user_id).all()
@@ -36,7 +35,6 @@ class BookingService:
         history = []
         
         for booking in bookings:
-            # Handle multiple tickets per booking
             for ticket in booking.tickets:
                 history.append({
                     'booking_id': booking.id,
@@ -57,7 +55,6 @@ class BookingService:
         
         report_lines = []
         for booking in bookings:
-            # Handle multiple tickets per booking
             for ticket in booking.tickets:
                 line = f"Booking #{booking.id}: {booking.user.username} - {ticket.match.home_team} vs {ticket.match.away_team} - Seat {ticket.seat_number} - {format_currency(booking.total_amount)}"
                 report_lines.append(line)
@@ -69,7 +66,6 @@ class BookingService:
         failed_bookings = []
         
         try:
-            # Calculate total amount for all tickets
             total_amount = 0
             tickets_to_book = []
             
@@ -84,7 +80,6 @@ class BookingService:
                     failed_bookings.append({'ticket_id': ticket_id, 'reason': 'Not available or does not exist'})
             
             if tickets_to_book:
-                # Create a single booking for all tickets
                 booking = Booking(
                     user_id=user_id,
                     total_amount=total_amount,
@@ -92,9 +87,8 @@ class BookingService:
                     payment_status=PaymentStatus.PENDING
                 )
                 db.session.add(booking)
-                db.session.flush()  # Get booking.id
+                db.session.flush()
                 
-                # Link all tickets to the booking
                 for ticket in tickets_to_book:
                     ticket.booking_id = booking.id
                     ticket.is_available = False

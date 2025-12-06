@@ -103,7 +103,6 @@ class PaymentProcessor:
                 payment.status = PaymentProcessingStatus.REFUNDED
                 booking = payment.booking
                 booking.status = BookingStatus.CANCELLED
-                # Handle multiple tickets - release all tickets in the booking
                 if booking.tickets:
                     for ticket in booking.tickets:
                         ticket.is_available = True
@@ -144,13 +143,9 @@ class PaymentProcessor:
 
 
 def calculate_discount(original_price, discount_code):
-    # TODO: Fetch discounts from a database model, e.g., Discount.get_by_code(discount_code)
-    # This makes the logic dynamic and manageable without code changes.
-    # For now, using environment variable or config-based approach as a step towards externalization
     import os
     import json
     
-    # Try to load from environment variable (JSON format) or use defaults
     discounts_json = os.environ.get('DISCOUNT_CODES', '{"SAVE10": 10, "SAVE20": 20, "VIP50": 50}')
     try:
         discounts = json.loads(discounts_json)

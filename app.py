@@ -51,12 +51,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    
-    # In a production setup, this block should be removed.
-    # Database migrations should be handled by a separate script (e.g., 'flask db upgrade').
-    # Uncomment only for development/testing:
-    # with app.app_context():
-    #     db.create_all()
-    
-    # Development server - replace with production WSGI server (Gunicorn/uWSGI) in production
     app.run(host='127.0.0.1', port=5000)
