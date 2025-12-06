@@ -21,16 +21,22 @@ def seed_database():
             is_admin=True
         )
         
+        user_password = os.environ.get('DEFAULT_USER_PASSWORD')
+        if not user_password:
+            import secrets
+            user_password = secrets.token_urlsafe(16)
+            print(f"Generated random password for test users: {user_password}")
+        
         user1 = User(
             username='john_doe',
             email='john@example.com',
-            password=generate_password_hash('userpass123')
+            password=generate_password_hash(user_password)
         )
         
         user2 = User(
             username='jane_smith',
             email='jane@example.com',
-            password=generate_password_hash('userpass123')
+            password=generate_password_hash(user_password)
         )
         
         db.session.add_all([admin, user1, user2])
@@ -42,7 +48,6 @@ def seed_database():
                 venue='Old Trafford',
                 match_date=datetime.now() + timedelta(days=7),
                 total_seats=75000,
-                available_seats=75000,
                 ticket_price=89.99
             ),
             Match(
@@ -51,7 +56,6 @@ def seed_database():
                 venue='Stamford Bridge',
                 match_date=datetime.now() + timedelta(days=14),
                 total_seats=40000,
-                available_seats=40000,
                 ticket_price=79.99
             ),
             Match(
@@ -60,7 +64,6 @@ def seed_database():
                 venue='Etihad Stadium',
                 match_date=datetime.now() + timedelta(days=21),
                 total_seats=55000,
-                available_seats=55000,
                 ticket_price=99.99
             )
         ]

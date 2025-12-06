@@ -6,7 +6,11 @@ from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
-SERVICE_FEE_RATE = float(os.environ.get('SERVICE_FEE_RATE', 0.15))
+try:
+    SERVICE_FEE_RATE = float(os.environ.get('SERVICE_FEE_RATE', '0.15'))
+except (ValueError, TypeError):
+    logger.warning('Invalid SERVICE_FEE_RATE in environment. Falling back to default 0.15.')
+    SERVICE_FEE_RATE = 0.15
 
 def validate_email(email):
     pattern = r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"
@@ -34,7 +38,4 @@ def build_query_string(params):
     return urlencode(params)
 
 def concatenate_strings(string_list):
-    result = ""
-    for s in string_list:
-        result = result + s
-    return result
+    return "".join(string_list)

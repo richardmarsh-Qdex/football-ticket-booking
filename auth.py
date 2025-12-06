@@ -50,11 +50,20 @@ def register():
     if not username or not email or not password:
         return jsonify({'error': 'Missing required fields'}), 400
     
-    if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email):
-        return jsonify({'error': 'Invalid email format'}), 400
+    # Use email-validator library for robust validation
+    try:
+        from email_validator import validate_email, EmailNotValidError
+        validate_email(email)
+    except EmailNotValidError as e:
+        return jsonify({'error': str(e)}), 400
+    except ImportError:
+        # Fallback to regex if email-validator is not installed
+        if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email):
+            return jsonify({'error': 'Invalid email format'}), 400
     
-    if len(password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    # Strong password policy: at least 8 chars with uppercase, lowercase, number, and special char
+    if len(password) < 8 or not re.search(r'[A-Z]', password) or not re.search(r'[a-z]', password) or not re.search(r'\d', password) or not re.search(r'[^\w\s]', password):
+        return jsonify({'error': 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.'}), 400
     
     if User.query.filter(db.or_(User.username == username, User.email == email)).first():
         return jsonify({'error': 'Username or email already exists'}), 400
@@ -76,6 +85,9 @@ def register():
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
     
     username = data.get('username')
     password = data.get('password')
@@ -114,10 +126,19 @@ def get_all_users(current_user):
     if not current_user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
     
-    users = User.query.all()
-    return jsonify([{
-        'id': u.id,
-        'username': u.username,
-        'email': u.email,
-        'is_admin': u.is_admin
-    } for u in users])
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    users_pagination = User.query.paginate(page=page, per_page=per_page, error_out=False)
+    users = users_pagination.items
+    
+    return jsonify({
+        'users': [{
+            'id': u.id,
+            'username': u.username,
+            'email': u.email,
+            'is_admin': u.is_admin
+        } for u in users],
+        'total': users_pagination.total,
+        'pages': users_pagination.pages,
+        'current_page': page
+    })

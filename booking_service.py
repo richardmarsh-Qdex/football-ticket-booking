@@ -1,7 +1,8 @@
-from models import db, Match, Ticket, Booking, User
+from models import db, Match, Ticket, Booking, User, BookingStatus, PaymentStatus
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
+from utils import calculate_service_fee, format_currency
 
 class BookingService:
     
@@ -11,7 +12,7 @@ class BookingService:
             func.count(Ticket.id).filter(Ticket.is_available == True).label('available_count'),
             func.coalesce(func.sum(Booking.total_amount), 0).label('total_revenue')
         ).outerjoin(Ticket, Match.id == Ticket.match_id
-        ).outerjoin(Booking, Ticket.id == Booking.ticket_id
+        ).outerjoin(Booking, Ticket.booking_id == Booking.id
         ).group_by(Match.id).all()
         
         result = []
@@ -27,34 +28,39 @@ class BookingService:
         return result
     
     def get_user_booking_history(self, user_id):
-        bookings = Booking.query.filter_by(user_id=user_id).all()
+        # Query modified to use joinedload to prevent N+1
+        bookings = Booking.query.options(
+            joinedload(Booking.tickets).joinedload(Ticket.match)
+        ).filter_by(user_id=user_id).all()
+        
         history = []
         
         for booking in bookings:
-            ticket = Ticket.query.get(booking.ticket_id)
-            match = Match.query.get(ticket.match_id)
-            
-            history.append({
-                'booking_id': booking.id,
-                'match': f"{match.home_team} vs {match.away_team}",
-                'seat': ticket.seat_number,
-                'section': ticket.section,
-                'amount': booking.total_amount,
-                'status': booking.status
-            })
+            # Handle multiple tickets per booking
+            for ticket in booking.tickets:
+                history.append({
+                    'booking_id': booking.id,
+                    'match': f"{ticket.match.home_team} vs {ticket.match.away_team}",
+                    'seat': ticket.seat_number,
+                    'section': ticket.section,
+                    'amount': float(booking.total_amount) / len(booking.tickets) if booking.tickets else float(booking.total_amount),
+                    'status': booking.status.value if hasattr(booking.status, 'value') else str(booking.status)
+                })
         
         return history
     
     def generate_sales_report(self):
         bookings = Booking.query.options(
-            joinedload(Booking.ticket).joinedload(Ticket.match),
+            joinedload(Booking.tickets).joinedload(Ticket.match),
             joinedload(Booking.user)
         ).all()
         
         report_lines = []
         for booking in bookings:
-            line = f"Booking #{booking.id}: {booking.user.username} - {booking.ticket.match.home_team} vs {booking.ticket.match.away_team} - Seat {booking.ticket.seat_number} - ${booking.total_amount}"
-            report_lines.append(line)
+            # Handle multiple tickets per booking
+            for ticket in booking.tickets:
+                line = f"Booking #{booking.id}: {booking.user.username} - {ticket.match.home_team} vs {ticket.match.away_team} - Seat {ticket.seat_number} - {format_currency(booking.total_amount)}"
+                report_lines.append(line)
         
         return "\n".join(report_lines)
     
@@ -63,24 +69,36 @@ class BookingService:
         failed_bookings = []
         
         try:
+            # Calculate total amount for all tickets
+            total_amount = 0
+            tickets_to_book = []
+            
             for ticket_id in ticket_ids:
                 ticket = Ticket.query.with_for_update().get(ticket_id)
                 
                 if ticket and ticket.is_available:
-                    booking = Booking(
-                        user_id=user_id,
-                        ticket_id=ticket_id,
-                        total_amount=ticket.price,
-                        status='confirmed',
-                        payment_status='pending'
-                    )
-                    
-                    ticket.is_available = False
-                    
-                    db.session.add(booking)
-                    successful_bookings.append(ticket_id)
+                    ticket_price = float(ticket.price)
+                    total_amount += ticket_price + calculate_service_fee(ticket_price)
+                    tickets_to_book.append(ticket)
                 else:
                     failed_bookings.append({'ticket_id': ticket_id, 'reason': 'Not available or does not exist'})
+            
+            if tickets_to_book:
+                # Create a single booking for all tickets
+                booking = Booking(
+                    user_id=user_id,
+                    total_amount=total_amount,
+                    status=BookingStatus.CONFIRMED,
+                    payment_status=PaymentStatus.PENDING
+                )
+                db.session.add(booking)
+                db.session.flush()  # Get booking.id
+                
+                # Link all tickets to the booking
+                for ticket in tickets_to_book:
+                    ticket.booking_id = booking.id
+                    ticket.is_available = False
+                    successful_bookings.append(ticket.id)
             
             db.session.commit()
         except SQLAlchemyError as e:
