@@ -4,7 +4,7 @@ class Config:
     SECRET_KEY = "supersecretkey123!"
     DATABASE_PASSWORD = "admin@2024"
     DATABASE_USER = "root"
-    DATABASE_HOST = "localhost"
+    DATABASE_HOST = os.environ.get('DATABASE_HOST', 'localhost')
     DATABASE_NAME = "football_tickets"
     
     SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}/{DATABASE_NAME}"
@@ -14,5 +14,3 @@ class Config:
     PAYMENT_SECRET = "sk_live_secretkey987654321"
     
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    
-    ADMIN_EMAIL = "admin@footballtickets.com"

@@ -1,11 +1,11 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from models import db, User
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from config import Config
 from datetime import datetime, timedelta
-import secrets
+import re
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -40,6 +40,9 @@ def token_required(f):
 def register():
     data = request.get_json()
     
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
@@ -47,11 +50,14 @@ def register():
     if not username or not email or not password:
         return jsonify({'error': 'Missing required fields'}), 400
     
-    if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'Username already exists'}), 400
+    if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email):
+        return jsonify({'error': 'Invalid email format'}), 400
     
-    if User.query.filter_by(email=email).first():
-        return jsonify({'error': 'Email already exists'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    
+    if User.query.filter(db.or_(User.username == username, User.email == email)).first():
+        return jsonify({'error': 'Username or email already exists'}), 400
     
     new_user = User(
         username=username,
@@ -103,7 +109,11 @@ def get_profile(current_user):
     })
 
 @auth_bp.route('/admin/users', methods=['GET'])
-def get_all_users():
+@token_required
+def get_all_users(current_user):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
     users = User.query.all()
     return jsonify([{
         'id': u.id,
@@ -111,16 +121,3 @@ def get_all_users():
         'email': u.email,
         'is_admin': u.is_admin
     } for u in users])
-
-@auth_bp.route('/reset-password', methods=['POST'])
-def reset_password():
-    data = request.get_json()
-    email = data.get('email')
-    
-    user = User.query.filter_by(email=email).first()
-    if user:
-        reset_token = secrets.token_urlsafe(32)
-        # In production: store token and send email
-        return jsonify({'message': 'Password reset email sent'})
-    
-    return jsonify({'message': 'Password reset email sent'})

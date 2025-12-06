@@ -1,12 +1,14 @@
 from flask import Flask, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from config import Config
 from models import db
 from auth import auth_bp
 from routes import api_bp
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 def create_app():
@@ -37,9 +39,7 @@ def create_app():
     @app.errorhandler(Exception)
     def handle_error(error):
         logger.error(f"Unhandled exception: {error}", exc_info=True)
-        return jsonify({
-            'error': 'An internal server error occurred'
-        }), 500
+        return jsonify({'error': 'An internal server error occurred'}), 500
     
     return app
 

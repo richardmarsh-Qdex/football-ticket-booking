@@ -1,3 +1,4 @@
+import os
 from app import create_app
 from models import db, User, Match, Ticket
 from werkzeug.security import generate_password_hash
@@ -9,23 +10,25 @@ def seed_database():
     with app.app_context():
         db.create_all()
         
+        admin_password = os.environ.get('DEFAULT_ADMIN_PASSWORD', 'changeme123!')
+        
         admin = User(
             username='admin',
             email='admin@footballtickets.com',
-            password=generate_password_hash('admin123'),
+            password=generate_password_hash(admin_password),
             is_admin=True
         )
         
         user1 = User(
             username='john_doe',
             email='john@example.com',
-            password=generate_password_hash('password123')
+            password=generate_password_hash('userpass123')
         )
         
         user2 = User(
             username='jane_smith',
             email='jane@example.com',
-            password=generate_password_hash('password123')
+            password=generate_password_hash('userpass123')
         )
         
         db.session.add_all([admin, user1, user2])

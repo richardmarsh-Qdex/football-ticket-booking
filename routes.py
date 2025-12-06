@@ -9,10 +9,12 @@ api_bp = Blueprint('api', __name__)
 booking_service = BookingService()
 payment_processor = PaymentProcessor()
 
+MAX_PER_PAGE = 100
+
 @api_bp.route('/matches', methods=['GET'])
 def get_matches():
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), MAX_PER_PAGE)
     
     matches = Match.query.paginate(page=page, per_page=per_page, error_out=False)
     
@@ -35,7 +37,12 @@ def get_matches():
 def search():
     query = request.args.get('q', '')
     results = search_matches(query)
-    return jsonify({'results': [dict(r) for r in results] if results else []})
+    return jsonify({'results': [{
+        'id': m.id,
+        'home_team': m.home_team,
+        'away_team': m.away_team,
+        'venue': m.venue
+    } for m in results]})
 
 @api_bp.route('/matches/<int:match_id>', methods=['GET'])
 def get_match(match_id):
@@ -110,13 +117,16 @@ def bulk_booking(current_user):
 def process_payment(current_user):
     data = request.get_json()
     
-    if not data or 'booking_id' not in data or 'amount' not in data:
+    if not data or 'booking_id' not in data or 'payment_token' not in data:
         return jsonify({'error': 'Missing required payment information'}), 400
     
+    booking = Booking.query.get(data.get('booking_id'))
+    if not booking or booking.user_id != current_user.id:
+        return jsonify({'error': 'Booking not found'}), 404
+    
     result = payment_processor.process_payment(
-        booking_id=data.get('booking_id'),
-        payment_token=data.get('payment_token'),
-        amount=data.get('amount')
+        booking_id=booking.id,
+        payment_token=data.get('payment_token')
     )
     
     return jsonify(result)
@@ -142,7 +152,13 @@ def get_invoice(current_user, booking_id):
 def admin_get_bookings():
     status = request.args.get('status', 'pending')
     bookings = get_bookings_by_status(status)
-    return jsonify({'bookings': [dict(b) for b in bookings] if bookings else []})
+    return jsonify({'bookings': [{
+        'id': b.id,
+        'user_id': b.user_id,
+        'ticket_id': b.ticket_id,
+        'status': b.status,
+        'total_amount': b.total_amount
+    } for b in bookings]})
 
 @api_bp.route('/admin/reports/sales', methods=['GET'])
 def sales_report():

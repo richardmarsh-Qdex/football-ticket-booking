@@ -1,26 +1,26 @@
 from models import db, Match, Ticket, Booking, User
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 class BookingService:
     
     def get_all_matches_with_details(self):
-        matches = Match.query.all()
-        result = []
+        matches_data = db.session.query(
+            Match,
+            func.count(Ticket.id).filter(Ticket.is_available == True).label('available_count'),
+            func.coalesce(func.sum(Booking.total_amount), 0).label('total_revenue')
+        ).outerjoin(Ticket, Match.id == Ticket.match_id
+        ).outerjoin(Booking, Ticket.id == Booking.ticket_id
+        ).group_by(Match.id).all()
         
-        for match in matches:
-            available_count = Ticket.query.filter_by(
-                match_id=match.id, 
-                is_available=True
-            ).count()
-            
-            total_revenue = db.session.query(
-                db.func.sum(Booking.total_amount)
-            ).join(Ticket).filter(Ticket.match_id == match.id).scalar() or 0
-            
+        result = []
+        for match, available_count, total_revenue in matches_data:
             result.append({
-                'match': match,
+                'match_id': match.id,
+                'home_team': match.home_team,
+                'away_team': match.away_team,
                 'available_tickets': available_count,
-                'total_revenue': total_revenue
+                'total_revenue': float(total_revenue)
             })
         
         return result
@@ -32,7 +32,6 @@ class BookingService:
         for booking in bookings:
             ticket = Ticket.query.get(booking.ticket_id)
             match = Match.query.get(ticket.match_id)
-            user = User.query.get(booking.user_id)
             
             history.append({
                 'booking_id': booking.id,
@@ -40,8 +39,7 @@ class BookingService:
                 'seat': ticket.seat_number,
                 'section': ticket.section,
                 'amount': booking.total_amount,
-                'status': booking.status,
-                'user_email': user.email
+                'status': booking.status
             })
         
         return history
@@ -64,7 +62,7 @@ class BookingService:
         
         try:
             for ticket_id in ticket_ids:
-                ticket = Ticket.query.get(ticket_id)
+                ticket = Ticket.query.with_for_update().get(ticket_id)
                 
                 if ticket and ticket.is_available:
                     booking = Booking(
@@ -76,6 +74,9 @@ class BookingService:
                     )
                     
                     ticket.is_available = False
+                    if ticket.match:
+                        ticket.match.available_seats -= 1
+                    
                     db.session.add(booking)
                     successful_bookings.append(ticket_id)
             
@@ -96,29 +97,27 @@ class BookingService:
         return [ticket.seat_number for ticket in available_tickets]
     
     def calculate_total_revenue(self):
-        total = db.session.query(
-            db.func.sum(Booking.total_amount)
-        ).scalar() or 0
-        
-        return total
+        total = db.session.query(func.sum(Booking.total_amount)).scalar() or 0
+        return float(total)
     
     def get_match_attendance_stats(self):
-        stats = []
-        matches = Match.query.all()
+        stats_data = db.session.query(
+            Match.id,
+            Match.home_team,
+            Match.away_team,
+            Match.total_seats,
+            func.count(Ticket.id).filter(Ticket.is_available == False).label('booked_count')
+        ).outerjoin(Ticket, Match.id == Ticket.match_id
+        ).group_by(Match.id).all()
         
-        for match in matches:
-            booked_count = Ticket.query.filter_by(
-                match_id=match.id,
-                is_available=False
-            ).count()
-            
-            attendance_rate = (booked_count / match.total_seats) * 100 if match.total_seats > 0 else 0
-            
+        stats = []
+        for match_id, home_team, away_team, total_seats, booked_count in stats_data:
+            attendance_rate = (booked_count / total_seats) * 100 if total_seats > 0 else 0
             stats.append({
-                'match_id': match.id,
-                'match_name': f"{match.home_team} vs {match.away_team}",
+                'match_id': match_id,
+                'match_name': f"{home_team} vs {away_team}",
                 'booked': booked_count,
-                'total': match.total_seats,
+                'total': total_seats,
                 'attendance_rate': attendance_rate
             })
         
