@@ -1,0 +1,7 @@
+flask==2.3.3
+flask-sqlalchemy==3.0.5
+pymysql==1.1.0
+requests==2.31.0
+python-dotenv==1.0.0
+werkzeug==2.3.7
+pyjwt==2.8.0
