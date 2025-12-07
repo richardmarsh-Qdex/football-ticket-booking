@@ -21,8 +21,8 @@ def create_signature(payload, secret):
 class PaymentProcessor:
     
     def __init__(self):
-        self.api_key = Config.PAYMENT_API_KEY
-        self.api_secret = Config.PAYMENT_SECRET
+        self.api_key = Config.PAYMENT_API_KEY or "default_api_key_placeholder"
+        self.api_secret = Config.PAYMENT_SECRET or "default_api_secret_placeholder"
         self.base_url = Config.PAYMENT_API_BASE_URL
     
     def process_payment(self, booking_id, payment_token):
@@ -84,37 +84,32 @@ class PaymentProcessor:
         if not payment:
             return {'success': False, 'error': 'Payment not found'}
         
-        try:
-            payload = {
-                'transaction_id': payment.transaction_id,
-                'amount': payment.amount
-            }
-            signature = create_signature(payload, self.api_secret)
-            response = requests.post(
-                f"{self.base_url}/refund",
-                json=payload,
-                headers={'Authorization': f'Signature {signature}'},
-                timeout=30
-            )
-            response.raise_for_status()
-            result = response.json()
-            
-            if result.get('status') == 'success':
-                payment.status = PaymentProcessingStatus.REFUNDED
-                booking = payment.booking
-                booking.status = BookingStatus.CANCELLED
-                if booking.tickets:
-                    for ticket in booking.tickets:
-                        ticket.is_available = True
-                        ticket.booking_id = None
-                db.session.commit()
-                return {'success': True, 'message': 'Refund processed'}
-            
-            return {'success': False, 'error': 'Refund failed'}
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Refund API error: {e}")
-            return {'success': False, 'error': 'Refund service unavailable'}
+        payload = {
+            'transaction_id': payment.transaction_id,
+            'amount': payment.amount
+        }
+        signature = create_signature(payload, self.api_secret)
+        response = requests.post(
+            f"{self.base_url}/refund",
+            json=payload,
+            headers={'Authorization': f'Signature {signature}'},
+            timeout=30
+        )
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get('status') == 'success':
+            payment.status = PaymentProcessingStatus.REFUNDED
+            booking = payment.booking
+            booking.status = BookingStatus.CANCELLED
+            if booking.tickets:
+                for ticket in booking.tickets:
+                    ticket.is_available = True
+                    ticket.booking_id = None
+            db.session.commit()
+            return {'success': True, 'message': 'Refund processed'}
+        
+        return {'success': False, 'error': 'Refund failed'}
     
     @staticmethod
     def verify_card(card_number):
