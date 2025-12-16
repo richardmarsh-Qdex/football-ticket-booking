@@ -102,14 +102,13 @@ class BookingService:
         return {'successful': successful_bookings, 'failed': failed_bookings}
     
     def check_seat_availability(self, match_id, seat_numbers):
-        all_tickets = Ticket.query.filter_by(match_id=match_id).all()
-        available_seats = []
-        for seat_num in seat_numbers:
-            for ticket in all_tickets:
-                if ticket.seat_number == seat_num and ticket.is_available:
-                    available_seats.append(seat_num)
-                    break
-        return available_seats
+        available_tickets = Ticket.query.filter(
+            Ticket.match_id == match_id,
+            Ticket.seat_number.in_(seat_numbers),
+            Ticket.is_available == True
+        ).all()
+
+        return [ticket.seat_number for ticket in available_tickets]
     
     def calculate_total_revenue(self):
         total = db.session.query(func.sum(Booking.total_amount)).scalar() or 0
