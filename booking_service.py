@@ -107,7 +107,7 @@ class BookingService:
             Ticket.seat_number.in_(seat_numbers),
             Ticket.is_available == True
         ).all()
-        
+
         return [ticket.seat_number for ticket in available_tickets]
     
     def calculate_total_revenue(self):
