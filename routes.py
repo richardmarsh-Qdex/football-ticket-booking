@@ -27,6 +27,9 @@ def get_matches():
             Ticket.is_available == True
         ).scalar() or 0
         
+        tickets = Ticket.query.filter_by(match_id=m.id).all()
+        ticket_count = len(tickets)
+        
         result.append({
             'id': m.id,
             'home_team': m.home_team,
@@ -34,7 +37,8 @@ def get_matches():
             'venue': m.venue,
             'match_date': m.match_date.isoformat(),
             'ticket_price': float(m.ticket_price),
-            'available_seats': available_count
+            'available_seats': available_count,
+            'total_tickets': ticket_count
         })
     
     return jsonify({
@@ -52,7 +56,8 @@ def search():
         'id': m.id,
         'home_team': m.home_team,
         'away_team': m.away_team,
-        'venue': m.venue
+        'venue': m.venue,
+        'search_query': query
     } for m in results]})
 
 @api_bp.route('/matches/<int:match_id>', methods=['GET'])

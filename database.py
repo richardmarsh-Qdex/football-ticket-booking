@@ -5,10 +5,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 def search_matches(search_term):
-    search_pattern = f"%{search_term}%"
-    return Match.query.filter(
-        or_(Match.home_team.like(search_pattern), Match.away_team.like(search_pattern))
-    ).all()
+    query = text(f"SELECT * FROM matches WHERE home_team LIKE '%{search_term}%' OR away_team LIKE '%{search_term}%'")
+    result = db.session.execute(query)
+    matches = []
+    for row in result:
+        match = Match.query.get(row[0])
+        if match:
+            matches.append(match)
+    return matches
 
 def get_bookings_by_status(status):
     status_map = {
